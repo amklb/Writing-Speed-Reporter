@@ -8,9 +8,8 @@ from datetime import datetime
 from time import sleep
 import pandas as pd
 
-events = {"hour" : [],
-           "minute" : [],
-             "process" : []}
+events = []
+per_minute_events = []
 writing_speed_per_minute = []
 ESC_KEY = keyboard.Key.f10
 REFRESH_TIME = 1 * 60
@@ -30,9 +29,12 @@ def on_press(key):
     try:
         print('alphanumeric key pressed')
         print(time.minute)
-        events["hour"].append(time.hour)
-        events["minute"].append(time.minute)
-        events["process"].append(process)
+        event_dict= {
+            "hour" : time.hour,
+            "minute" : time.minute,
+            "process" : process
+        }
+        events.append(event_dict)
         if key == ESC_KEY:
             return False
     except AttributeError:
@@ -42,31 +44,35 @@ def aggregate_events():
     try:
         processed_events = events.copy()
         events_df = pd.DataFrame(processed_events)
-        events = {"hour" : [], "minute" : [], "process" : []}
-        events_df.groupby("minute").agg(
+        events.clear()
+        events_df = events_df.groupby(["hour", "minute"]).agg(
             strokes_per_minute =("process", "count"), 
             used_process = ("process", lambda x: x.mode()[0])
-        )
-    except:
+        ).reset_index()
+        print(events_df.shape)
+        print(events_df)
+        events_array = events_df.to_numpy()
+        for array in events_array:
+            per_minute_events.append(array)
+    except KeyError:
         pass
+    
     print("refreshing")
-    print(events_df)
+    
+    sleep(REFRESH_TIME)
     aggregate_events()
 
-
+def generate_report():
+    report_df = pd.DataFrame(per_minute_events)
+    
 
 
 
 if __name__ == "__main__":
-    time = 60
-    while time > 0:
-        with keyboard.Listener(on_press=on_press) as listener:
-            time -= 1
-            print(time)
-            sleep(1)
-            listener.join()
-            
-    aggregate_events()
+    with keyboard.Listener(on_press=on_press) as listener:
+       
+        aggregate_events()
+        listener.join()
 
 
 
