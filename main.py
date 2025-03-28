@@ -9,6 +9,7 @@ from time import sleep
 import pandas as pd
 import py_cui
 import seaborn as sns
+import threading
 
 class WritingSpeedApp():
     def __init__(self, master : py_cui.PyCUI):
@@ -17,13 +18,18 @@ class WritingSpeedApp():
         self.writing_speed_per_minute = []
         self.ESC_KEY = keyboard.Key.f10
         self.REFRESH_TIME = 1 * 20
-        # self.master = master
 
-        # self.title_label = self.master.add_label(title="Writing", row=0, column=1)
-        # self.start_button = self.master.add_button("START", 3, 1, command=self.start)
-        # self.stop_button = self.master.add_button("STOP", 3, 2, command=self.stop)
-        # self.saved_button = self.master.add_button("SAVED", 4, 1, command=None)
-        self.start()
+        self.master = master
+
+        self.title_label = self.master.add_label(title="Writing", row=0, column=1)
+        self.start_button = self.master.add_button("START", 3, 1, command=self.start)
+        self.stop_button = self.master.add_button("STOP", 3, 2, command=self.stop)
+        self.saved_button = self.master.add_button("SAVED", 4, 1, command=None)
+
+        self.listener = None
+        self.listener_thread = None
+        self.aggregate_thread = None
+        self.aggregate_running = False
 
     def get_process_name(self):
         try:
@@ -73,7 +79,10 @@ class WritingSpeedApp():
         print("refreshing")
         
         sleep(self.REFRESH_TIME)
-        self.aggregate_events()
+        if self.aggregate_running:
+            self.aggregate_events()
+        else:
+            return 
 
     def generate_report(self):
         report_df = pd.DataFrame(self.per_minute_events)
@@ -97,19 +106,29 @@ class WritingSpeedApp():
 
     def start(self):
         print("starting")
-        with keyboard.Listener(on_press=self.on_press) as self.listener:
-            
-            self.aggregate_events()
-            self.listener.join()
+        if self.listener and self.listener.running: #if thread already started
+            self.master.show_warning_popup("Error", "Recording is already running!")
+        
+        self.listener = keyboard.Listener(on_press=self.on_press)
+        self.listener_thread = threading.Thread(target=self.listener.start, daemon=True)
+        self.aggregate_thread = threading.Thread(target=self.aggregate_events, daemon=True)
+        self.listener_thread.start()
+        self.aggregate_thread.start()
+        self.aggregate_running = True
+        
 
     def stop(self):
         self.listener.stop()
         self.generate_report()
+        self.listener = None
+        self.listener_thread = None
+        self.aggregate_running = False
+        self.aggregate_thread = None
 
 if __name__ == "__main__":
     root = py_cui.PyCUI(7, 6)
     root.set_title("Writing Speed") 
     s = WritingSpeedApp(root)
-    #root.start()
+    root.start()
 
 
