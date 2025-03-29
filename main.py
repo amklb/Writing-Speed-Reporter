@@ -10,6 +10,7 @@ import pandas as pd
 import py_cui
 import seaborn as sns
 import threading
+import papermill as pm
 
 class WritingSpeedApp():
     def __init__(self, master : py_cui.PyCUI):
@@ -85,23 +86,21 @@ class WritingSpeedApp():
             return 
 
     def generate_report(self):
-        report_df = pd.DataFrame(self.per_minute_events)
-        print(report_df)
-        speed_by_process_data = report_df.groupby(["process"]).agg(
-            speed = ("strokes_per_minute", "mean")
-        ).reset_index()
-        fig_process = sns.barplot(data=speed_by_process_data,
-                                  x="process",
-                                  y="speed")
-        fig_process = fig_process.get_figure()
-        fig_process.savefig("out.png")
+        path = self.save_record()
+        pm.execute_notebook(
+            path,
+            path,
+            parameters=dict(path=path, date=datetime.now())
+        )
+        self.master.show_message_popup("Report Generated!", "Report saved in the PDF folder!")
         
     def save_record(self):
         report_df = pd.DataFrame(self.per_minute_events)
         print(report_df)
         date = datetime.now()
-        report_df.to_csv(path_or_buf=f".\\saved\\record_{date.year}-{date.month}-{date.day}_{date.hour}-{date.minute}.csv")
-
+        path = f".\\saved\\record_{date.year}-{date.month}-{date.day}_{date.hour}-{date.minute}.csv"
+        report_df.to_csv(path_or_buf=path)
+        return path
 
 
     def start(self):
