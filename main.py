@@ -86,11 +86,12 @@ class WritingSpeedApp():
             return 
 
     def generate_report(self):
+        date = datetime.now()
         path = self.save_record()
         pm.execute_notebook(
-            path,
-            path,
-            parameters=dict(path=path, date=datetime.now())
+            r".\generate_report.ipynb",
+            r".\done_report.ipynb",
+            parameters=dict(date=1)
         )
         self.master.show_message_popup("Report Generated!", "Report saved in the PDF folder!")
         
