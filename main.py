@@ -19,6 +19,10 @@ class WritingSpeedApp():
         self.writing_speed_per_minute = []
         self.ESC_KEY = keyboard.Key.f10
         self.REFRESH_TIME = 1 * 20
+        self.max_speed = 400
+        self.min_speed = 70
+        self.status_text = "OFF"
+
 
         self.master = master
 
@@ -26,6 +30,9 @@ class WritingSpeedApp():
         self.start_button = self.master.add_button("START", 3, 1, command=self.start)
         self.stop_button = self.master.add_button("STOP", 3, 2, command=self.stop)
         self.saved_button = self.master.add_button("SAVED", 4, 1, command=None)
+        self.options_button = self.master.add_button("OPTIONS", 4, 2,
+                                                     command=self.open_options)
+        self.status_label = self.master.add_label(title=self.status_text, row=1, column=1)
 
         self.listener = None
         self.listener_thread = None
@@ -50,7 +57,7 @@ class WritingSpeedApp():
             event_dict= {
                 "hour" : time.hour,
                 "minute" : time.minute,
-                "process" : process
+                "process" : process,
             }
             self.events.append(event_dict)
             if key == keyboard.Key.f10:
@@ -67,12 +74,13 @@ class WritingSpeedApp():
             self.events.clear()
             events_df = events_df.groupby(["hour", "minute"]).agg(
                 strokes_per_minute =("process", "count"), 
-                process = ("process", lambda x: x.mode()[0])
+                process = ("process", lambda x: x.mode()[0]),
             ).reset_index()
             print(events_df.shape)
             print(events_df)
             events_array = events_df.to_dict('records') 
             for array in events_array:
+                array["datetime"] = datetime.now()
                 self.per_minute_events.append(array)
         except KeyError:
             pass
@@ -86,26 +94,35 @@ class WritingSpeedApp():
             return 
 
     def generate_report(self):
-        date = datetime.now()
         path = self.save_record()
-        pm.execute_notebook(
-            r".\generate_report.ipynb",
-            r".\done_report.ipynb",
-            parameters=dict(date=1)
-        )
-        self.master.show_message_popup("Report Generated!", "Report saved in the PDF folder!")
+        if path != False:
+            pm.execute_notebook(
+                r".\generate_report.ipynb",
+                r".\done_report.ipynb",
+                parameters=dict(path=path, date=1, min_speed=self.min_speed, max_speed=self.max_speed)
+            )
+            self.master.show_message_popup("Report Generated!", "Report saved in the PDF folder!")
+        else:
+            self.master.show_warning_popup("Warning!", "Not enough data to generate report!")
         
     def save_record(self):
         report_df = pd.DataFrame(self.per_minute_events)
+        self.master.show_error_popup("T", report_df.empty)
+        print(report_df.empty)
         print(report_df)
-        date = datetime.now()
-        path = f".\\saved\\record_{date.year}-{date.month}-{date.day}_{date.hour}-{date.minute}.csv"
-        report_df.to_csv(path_or_buf=path)
-        return path
+        if report_df.empty == True:
+            return False
+        else:
+            print(report_df)
+            date = datetime.now()
+            path = f".\\saved\\record_{date.year}-{date.month}-{date.day}_{date.hour}-{date.minute}.csv"
+            report_df.to_csv(path_or_buf=path)
+            return path
 
 
     def start(self):
         print("starting")
+        self.status_text = "Running..."
         if self.listener and self.listener.running: #if thread already started
             self.master.show_warning_popup("Error", "Recording is already running!")
         
@@ -118,12 +135,42 @@ class WritingSpeedApp():
         
 
     def stop(self):
+        self.status_text = "OFF"
         self.listener.stop()
         self.generate_report()
         self.listener = None
         self.listener_thread = None
         self.aggregate_running = False
         self.aggregate_thread = None
+    
+    def options(self, paramter):
+        print(paramter)
+        if paramter == "minimum speed":
+            self.master.show_text_box_popup("Minimum wiring speed considered (usually 70 cpm):", command=self.set_min_speed)
+        elif paramter == "maximum speed":
+            self.master.show_text_box_popup("Minimum wiring speed considered (usually 400 cpm):", command=self.set_max_speed)
+
+    def set_min_speed(self, speed):
+        try:
+            self.min_speed = int(speed)
+        except:
+            self.master.show_error_popup("Error!", "Enter valid number!")
+            sleep(1)
+            self.options("minimum speed")
+    
+    def set_max_speed(self, speed):
+        try:
+            self.max_speed = int(speed) 
+        except:
+            self.master.show_error_popup("Error!", "Enter valid number!")
+            sleep(1)
+            self.options("maximum speed")   
+    
+    def open_options(self):
+        self.master.show_menu_popup("Change parameters:",
+                                    ["minimum speed", "maximum speed"],
+                                    command=self.options,
+                                    run_command_if_none=False)
 
 if __name__ == "__main__":
     root = py_cui.PyCUI(7, 6)
