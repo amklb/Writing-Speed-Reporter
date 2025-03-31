@@ -10,7 +10,7 @@ import pandas as pd
 import py_cui
 import seaborn as sns
 import threading
-import papermill as pm
+from pylatex import Document, Figure, Section, Subsection
 
 class WritingSpeedApp():
     def __init__(self, master : py_cui.PyCUI):
@@ -75,13 +75,13 @@ class WritingSpeedApp():
             events_df = events_df.groupby(["hour", "minute"]).agg(
                 strokes_per_minute =("process", "count"), 
                 process = ("process", lambda x: x.mode()[0]),
-            ).reset_index()
+            )
             print(events_df.shape)
             print(events_df)
             events_array = events_df.to_dict('records') 
-            for array in events_array:
-                array["datetime"] = datetime.now()
-                self.per_minute_events.append(array)
+            for event in events_array:
+                event["timestamp"] = datetime.now()
+                self.per_minute_events.append(event)
         except KeyError:
             pass
         
@@ -94,13 +94,50 @@ class WritingSpeedApp():
             return 
 
     def generate_report(self):
-        path = self.save_record()
-        if path != False:
-            pm.execute_notebook(
-                r".\generate_report.ipynb",
-                r".\done_report.ipynb",
-                parameters=dict(path=path, date=1, min_speed=self.min_speed, max_speed=self.max_speed)
-            )
+        report_df = self.save_record()
+        if report_df:
+            # Clean data and get info to be printed
+            clean_df = report_df.query(f"strokes_per_minute >= {self.min_speed} and strokes_per_minute <= {self.max_speed}")
+            peak_speed = np.max(clean_df["strokes_per_minute"])
+            average_speed = np.mean(clean_df["strokes_per_minute"])
+            total_characters = np.sum(report_df["strokes_per_minute"])
+
+            # Generate graph with processes
+            speed_by_process_data = clean_df.groupby(["process"]).agg(
+                speed = ("strokes_per_minute", "mean")).reset_index()
+            fig_process = sns.barplot(data=speed_by_process_data,
+                                    x="process",
+                                    y="speed")
+            fig_process.savefig(r".\graphs\barplot.png")
+            fig_process.close()
+
+            # Generate graph with timeline
+            speed_by_time_data = report_df
+            speed_by_time_data["time"] = report_df["timestamp"].dt.strftime('%H:%M')
+            fig_time = sns.lineplot(data=report_df,
+                                    x="time",
+                                    y="strokes_per_minute")
+            fig_time.savefig(r".\graphs\lineplot.png")
+            fig_time.close()
+
+            # Creating a LaTeX document
+            l_doc =Document(documentclass='report')
+
+            with l_doc.create(Section("Today's writing speed report:")):
+                l_doc.append(f"Date: {datetime.now()}\n")
+                l_doc.append(f"Total characters: {total_characters} characters\n")
+                l_doc.append(f"Peak Speed: {peak_speed} cpm\n")
+                l_doc.append(f"Average speed: {average_speed} cmp\n")
+            with l_doc.create(Figure(position="h!")) as fig1:
+                fig1.add_image(r".\graphs\barplot.png", width="400px")
+                fig1.add_caption("Average CPM per app used")
+            with l_doc.create(Figure(position="h!")) as fig2:
+                fig1.add_image(r".\graphs\lineplot.png", width="400px")
+                fig1.add_caption("CPM during writing time")
+
+            l_doc.generate_pdf("full", clean_tex=False)
+
+
             self.master.show_message_popup("Report Generated!", "Report saved in the PDF folder!")
         else:
             self.master.show_warning_popup("Warning!", "Not enough data to generate report!")
@@ -111,13 +148,13 @@ class WritingSpeedApp():
         print(report_df.empty)
         print(report_df)
         if report_df.empty == True:
-            return False
+            return None
         else:
             print(report_df)
             date = datetime.now()
             path = f".\\saved\\record_{date.year}-{date.month}-{date.day}_{date.hour}-{date.minute}.csv"
             report_df.to_csv(path_or_buf=path)
-            return path
+            return report_df
 
 
     def start(self):
@@ -171,6 +208,9 @@ class WritingSpeedApp():
                                     ["minimum speed", "maximum speed"],
                                     command=self.options,
                                     run_command_if_none=False)
+
+
+
 
 if __name__ == "__main__":
     root = py_cui.PyCUI(7, 6)
