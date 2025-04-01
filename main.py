@@ -10,7 +10,7 @@ import pandas as pd
 import py_cui
 import seaborn as sns
 import threading
-from pylatex import Document, Figure, Section, Subsection
+from pylatex import Document, Figure, Section
 
 class WritingSpeedApp():
     def __init__(self, master : py_cui.PyCUI):
@@ -21,6 +21,7 @@ class WritingSpeedApp():
         self.REFRESH_TIME = 1 * 20
         self.max_speed = 400
         self.min_speed = 70
+        self.running_status = False
         self.status_text = "OFF"
 
 
@@ -95,52 +96,56 @@ class WritingSpeedApp():
 
     def generate_report(self):
         report_df = self.save_record()
-        if report_df:
-            # Clean data and get info to be printed
-            clean_df = report_df.query(f"strokes_per_minute >= {self.min_speed} and strokes_per_minute <= {self.max_speed}")
-            peak_speed = np.max(clean_df["strokes_per_minute"])
-            average_speed = np.mean(clean_df["strokes_per_minute"])
-            total_characters = np.sum(report_df["strokes_per_minute"])
+        timestamp = datetime.now()
+        # Clean data and get info to be printed
+        clean_df = report_df.query(f"strokes_per_minute >= {self.min_speed} and strokes_per_minute <= {self.max_speed}")
+        peak_speed = np.max(clean_df["strokes_per_minute"])
+        average_speed = np.mean(clean_df["strokes_per_minute"])
+        total_characters = np.sum(report_df["strokes_per_minute"])
 
-            # Generate graph with processes
-            speed_by_process_data = clean_df.groupby(["process"]).agg(
-                speed = ("strokes_per_minute", "mean")).reset_index()
-            fig_process = sns.barplot(data=speed_by_process_data,
-                                    x="process",
-                                    y="speed")
-            fig_process.savefig(r".\graphs\barplot.png")
-            fig_process.close()
+        # Generate graph with processes
+        speed_by_process_data = clean_df.groupby(["process"]).agg(
+            speed = ("strokes_per_minute", "mean")).reset_index()
+        fig_process = sns.barplot(data=speed_by_process_data,
+                                x="process",
+                                y="speed")
+        fig1 = fig_process.get_figure()
+        fig1.savefig(r".\graphs\barplot.png")
+        fig1.clf()
+       
 
-            # Generate graph with timeline
-            speed_by_time_data = report_df
-            speed_by_time_data["time"] = report_df["timestamp"].dt.strftime('%H:%M')
-            fig_time = sns.lineplot(data=report_df,
-                                    x="time",
-                                    y="strokes_per_minute")
-            fig_time.savefig(r".\graphs\lineplot.png")
-            fig_time.close()
+        # Generate graph with timeline
+        speed_by_time_data = report_df
+        speed_by_time_data["time"] = report_df["timestamp"].dt.strftime('%H:%M')
+        fig_time = sns.lineplot(data=report_df,
+                                x="time",
+                                y="strokes_per_minute",
+                                errorbar=None)
+        fig2 = fig_time.get_figure()
+        fig2.savefig(r".\graphs\lineplot.png")
+        fig2.clf()
+        
 
-            # Creating a LaTeX document
-            l_doc =Document(documentclass='report')
+        # Creating a LaTeX document
+        l_doc =Document(documentclass='report')
 
-            with l_doc.create(Section("Today's writing speed report:")):
-                l_doc.append(f"Date: {datetime.now()}\n")
-                l_doc.append(f"Total characters: {total_characters} characters\n")
-                l_doc.append(f"Peak Speed: {peak_speed} cpm\n")
-                l_doc.append(f"Average speed: {average_speed} cmp\n")
-            with l_doc.create(Figure(position="h!")) as fig1:
-                fig1.add_image(r".\graphs\barplot.png", width="400px")
+        with l_doc.create(Section("Today's writing speed report:")):
+            l_doc.append(f"Date: {timestamp.date()}, {timestamp.hour}:{timestamp.minute}\n")
+            l_doc.append(f"Total characters: {total_characters} characters\n")
+            l_doc.append(f"Peak Speed: {peak_speed} cpm\n")
+            l_doc.append(f"Average speed: {average_speed: .2f} cmp\n")
+            with l_doc.create(Figure(position="H")) as fig1:
+                fig1.add_image(r".\graphs\barplot.png", width="300px")
                 fig1.add_caption("Average CPM per app used")
-            with l_doc.create(Figure(position="h!")) as fig2:
-                fig1.add_image(r".\graphs\lineplot.png", width="400px")
-                fig1.add_caption("CPM during writing time")
+            with l_doc.create(Figure(position="H")) as fig2:
+                fig2.add_image(r".\graphs\lineplot.png", width="300px")
+                fig2.add_caption("CPM during writing time")
 
-            l_doc.generate_pdf("full", clean_tex=False)
+        l_doc.generate_pdf(f".\\saved\\{timestamp.date}_{datetime.hour}-{datetime.minute}", clean_tex=False, compiler="pdflatex")
 
 
-            self.master.show_message_popup("Report Generated!", "Report saved in the PDF folder!")
-        else:
-            self.master.show_warning_popup("Warning!", "Not enough data to generate report!")
+        self.master.show_message_popup("Report Generated!", "Report saved in the PDF folder!")
+        
         
     def save_record(self):
         report_df = pd.DataFrame(self.per_minute_events)
@@ -148,7 +153,7 @@ class WritingSpeedApp():
         print(report_df.empty)
         print(report_df)
         if report_df.empty == True:
-            return None
+            self.master.show_warning_popup("Warning!", "Not enough data to generate report!")
         else:
             print(report_df)
             date = datetime.now()
@@ -159,6 +164,7 @@ class WritingSpeedApp():
 
     def start(self):
         print("starting")
+        self.running_status = True
         self.status_text = "Running..."
         if self.listener and self.listener.running: #if thread already started
             self.master.show_warning_popup("Error", "Recording is already running!")
@@ -172,14 +178,18 @@ class WritingSpeedApp():
         
 
     def stop(self):
-        self.status_text = "OFF"
-        self.listener.stop()
-        self.generate_report()
-        self.listener = None
-        self.listener_thread = None
-        self.aggregate_running = False
-        self.aggregate_thread = None
-    
+        if self.running_status == True:
+            self.status_text = "OFF"
+            self.listener.stop()
+            self.generate_report()
+            self.listener = None
+            self.listener_thread = None
+            self.aggregate_running = False
+            self.aggregate_thread = None
+            self.running_status = False
+        else:
+            self.master.show_error_popup("Error!", "Tracking is not running")
+        
     def options(self, paramter):
         print(paramter)
         if paramter == "minimum speed":
