@@ -1,3 +1,4 @@
+
 from win32gui import GetWindowText, GetForegroundWindow
 from win32process import GetWindowThreadProcessId
 from time import sleep
@@ -10,7 +11,8 @@ import pandas as pd
 import py_cui
 import seaborn as sns
 import threading
-from pylatex import Document, Figure, Section
+from reportlab.pdfgen import canvas
+from reportlab.lib.pagesizes import letter
 
 class WritingSpeedApp():
     def __init__(self, master : py_cui.PyCUI):
@@ -97,6 +99,7 @@ class WritingSpeedApp():
     def generate_report(self):
         report_df = self.save_record()
         timestamp = datetime.now()
+
         # Clean data and get info to be printed
         clean_df = report_df.query(f"strokes_per_minute >= {self.min_speed} and strokes_per_minute <= {self.max_speed}")
         peak_speed = np.max(clean_df["strokes_per_minute"])
@@ -124,25 +127,20 @@ class WritingSpeedApp():
         fig2 = fig_time.get_figure()
         fig2.savefig(r".\graphs\lineplot.png")
         fig2.clf()
-        
+    
+        # Create Reportlab PDF
+        filename = f"report{timestamp.date()}_{timestamp.hour}-{timestamp.minute}.pdf"
+        doc =  canvas.Canvas(filename, pagesize=letter)
+        doc.setLineWidth(.3)
+        doc.setFont('Helvetica', 12)
+        doc.drawString(30,750,f"Date: {timestamp.date()}, {timestamp.hour}:{timestamp.minute}")
+        doc.drawString(30, 735, f"Total characters: {total_characters} characters")
+        doc.drawString(30, 720, f"Average speed: {average_speed} cmp")
+        doc.drawString(30, 705, f"Peak Speed: {peak_speed} cpm")
+        doc.drawImage(r".\graphs\barplot.png", 30, 350, 320, 240)
+        doc.drawImage(r".\graphs\lineplot.png", 30, 100, 320, 240)
 
-        # Creating a LaTeX document
-        l_doc =Document(documentclass='report')
-
-        with l_doc.create(Section("Today's writing speed report:")):
-            l_doc.append(f"Date: {timestamp.date()}, {timestamp.hour}:{timestamp.minute}\n")
-            l_doc.append(f"Total characters: {total_characters} characters\n")
-            l_doc.append(f"Peak Speed: {peak_speed} cpm\n")
-            l_doc.append(f"Average speed: {average_speed: .2f} cmp\n")
-            with l_doc.create(Figure(position="H")) as fig1:
-                fig1.add_image(r".\graphs\barplot.png", width="300px")
-                fig1.add_caption("Average CPM per app used")
-            with l_doc.create(Figure(position="H")) as fig2:
-                fig2.add_image(r".\graphs\lineplot.png", width="300px")
-                fig2.add_caption("CPM during writing time")
-
-        l_doc.generate_pdf(f".\\saved\\{timestamp.date}_{datetime.hour}-{datetime.minute}", clean_tex=False, compiler="pdflatex")
-
+        doc.save()
 
         self.master.show_message_popup("Report Generated!", "Report saved in the PDF folder!")
         
