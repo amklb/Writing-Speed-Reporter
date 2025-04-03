@@ -5,6 +5,8 @@ from win32process import GetWindowThreadProcessId
 import psutil
 from pathlib import Path
 import threading
+from os import listdir
+from os.path import isfile, join
 
 from time import sleep # Time 
 from datetime import datetime
@@ -18,6 +20,7 @@ import py_cui # UI
 
 import seaborn as sns #Plots
 import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
 
 from reportlab.pdfgen import canvas # PDFs
 from reportlab.lib.pagesizes import letter
@@ -38,15 +41,17 @@ class WritingSpeedApp():
         self.min_speed = 70
         self.running_status = False
         self.status_text = "OFF"
+        self.files = []
+        self.selected_dates = []
 
         # Set up CUI
         self.master = master
         self.title_label = self.master.add_label(title="Writing", row=0, column=1)
         self.start_button = self.master.add_button("START", 3, 1, command=self.start)
         self.stop_button = self.master.add_button("STOP", 3, 2, command=self.stop)
-        self.saved_button = self.master.add_button("SAVED", 4, 1, command=None)
+        self.saved_button = self.master.add_button("SAVED", 4, 1, command=self.saved_popup)
         self.options_button = self.master.add_button("OPTIONS", 4, 2, command=self.open_options)
-        self.status_label = self.master.add_label(title=self.status_text, row=1, column=1)
+        self.status_label = self.master.add_label(title="OFF", row=1, column=1).set_color(py_cui.RED_ON_BLACK)
 
         # Set up variables for threads
         self.listener = None
@@ -60,9 +65,8 @@ class WritingSpeedApp():
         Path(r".\pdf").mkdir(exist_ok=True)
 
         #Set up aesthetics
-        sns.set_palette("flare")
         sns.set_style("darkgrid")
-
+        sns.set_palette("flare")
 
     def get_process_name(self):
         #Get name of the current process
@@ -73,7 +77,7 @@ class WritingSpeedApp():
         except:
             return np.nan
         
-    def on_relase(self, key):
+    def on_press(self, key):
         # Put keyboard event into temporary df
         time = datetime.now()
         process = self.get_process_name()
@@ -119,8 +123,8 @@ class WritingSpeedApp():
         else:
             return 
 
-    def generate_report(self):
-        report_df = self.save_record()
+    def generate_report(self, df, mode = 0):
+        report_df = df
         timestamp = datetime.now()
 
         # Clean data and get info to be printed
@@ -131,10 +135,13 @@ class WritingSpeedApp():
 
         # Generate graph with processes
         speed_by_process_data = clean_df.groupby(["process"]).agg(
-            speed = ("strokes_per_minute", "mean")).reset_index()
+        speed = ("strokes_per_minute", "mean")).reset_index()
         fig_process = sns.barplot(data=speed_by_process_data,
                                 x="process",
-                                y="speed")
+                                y="speed",
+                                palette="flare",
+                                hue="process",
+                                legend=False)
         fig_process.set_title("CPM by process")
         fig_process.set_ylabel("Characters Per Minute")
         fig_process.set_xlabel("Used Process")
@@ -144,12 +151,22 @@ class WritingSpeedApp():
        
 
         # Generate graph with timeline
-        speed_by_time_data = report_df
-        speed_by_time_data["time"] = report_df["timestamp"].dt.strftime('%H:%M')
-        fig_time = sns.lineplot(data=report_df,
+        
+        if mode == 0:
+            speed_by_time_data = report_df
+            speed_by_time_data["time"] = report_df["timestamp"].dt.strftime('%H:%M')
+            
+        elif mode == 1:
+            speed_by_time_data = clean_df
+            speed_by_time_data["time"] = clean_df["timestamp"].dt.date
+
+        fig_time = sns.lineplot(data=speed_by_time_data,
                                 x="time",
                                 y="strokes_per_minute",
-                                errorbar=None)
+                                errorbar=None,
+                                )
+        if mode == 1:
+            fig_time.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
         fig_time.tick_params(axis='x', rotation=90, labelsize=6)
         fig_time.set_title("CPM by time")
         fig_time.set_ylabel("Characters per Minute")
@@ -161,16 +178,16 @@ class WritingSpeedApp():
 
         # Create Reportlab PDF
         try:
-            filename = f"report{timestamp.date()}_{timestamp.hour}-{timestamp.minute}.pdf"
+            filename = f".\\pdf\\report{timestamp.date()}_{timestamp.hour}-{timestamp.minute}.pdf"
             doc =  canvas.Canvas(filename, pagesize=letter)
             doc.setLineWidth(.3)
-            pdfmetrics.registerFont(TTFont("DejaVu-Sans", r".\font\DejaVuSans.ttf"))
-            doc.setFont("DejaVu-Sans", 12)
-            doc.drawString(30,750,f"Date: {timestamp.date()}, {timestamp.hour}:{timestamp.minute}")
+            pdfmetrics.registerFont(TTFont("DejaVu-Sans", r".\font\DejaVuSans.ttf")) # Load font
+            doc.setFont("DejaVu-Sans", 12) 
+            doc.drawString(30,750,f"Date: {timestamp.date()}, {timestamp.hour}:{timestamp.minute}") #Put text
             doc.drawString(30, 735, f"Total characters: {total_characters} characters")
-            doc.drawString(30, 720, f"Average speed: {average_speed} cmp")
+            doc.drawString(30, 720, f"Average speed: {average_speed: .2f} cmp")
             doc.drawString(30, 705, f"Peak Speed: {peak_speed} cpm")
-            doc.drawImage(r".\graphs\barplot.png", 30, 450, 320, 240)
+            doc.drawImage(r".\graphs\barplot.png", 30, 450, 320, 240) # Put images
             doc.drawImage(r".\graphs\lineplot.png", 30, 200, 320, 240)
             doc.save()
 
@@ -188,14 +205,15 @@ class WritingSpeedApp():
             date = datetime.now()
             path = f".\\saved\\{date.year}-{date.month}-{date.day}_{date.hour}-{date.minute}.csv"
             report_df.to_csv(path_or_buf=path)
-            return report_df
+            self.generate_report(report_df)
 
 
     def start(self):
         # Start listening for keyboard
         print("starting")
         self.running_status = True
-        self.status_text = "Running..."
+        self.status_label = self.master.add_label(title="Running...", row=1, column=1).set_color(py_cui.GREEN_ON_BLACK)
+
 
         if self.listener and self.listener.running: #if thread already started
             self.master.show_warning_popup("Error", "Recording is already running!")
@@ -211,15 +229,16 @@ class WritingSpeedApp():
 
     def stop(self):
         # Stop listening for keyboard and call to generate report
+        
         if self.running_status == True:
-            self.status_text = "OFF"
             self.listener.stop()
-            self.generate_report()
+            self.save_record()
             self.listener = None
             self.listener_thread = None
             self.aggregate_running = False
             self.aggregate_thread = None
             self.running_status = False
+            self.status_label = self.master.add_label(title="OFF", row=1, column=1).set_color(py_cui.RED_ON_BLACK)
         else:
             self.master.show_error_popup("Error!", "Tracking is not running")
         
@@ -250,13 +269,35 @@ class WritingSpeedApp():
     
     def open_options(self):
         # Open options menu
+        self.selected_dates.clear()
         self.master.show_menu_popup("Change parameters:",
                                     ["minimum speed", "maximum speed"],
                                     command=self.options,
                                     run_command_if_none=False)
 
+    def saved_popup(self):
+        self.files = [f for f in listdir(r".\saved") if isfile(join(r".\saved", f))]
+        self.master.show_menu_popup("Generate multi-day report, pick a start date:", self.files, command=self.pick_dates, run_command_if_none=False)
 
+    def pick_dates(self, item):
+        start_index = self.files.index(item)
+        self.selected_dates.append(start_index)
+        self.master.show_menu_popup("Generate multi-day report, pick an end date:",
+                                     self.files[start_index + 1:], command=self.multi_day_report,
+                                       run_command_if_none=False)
 
+    def multi_day_report(self, item):
+        end_index = self.files.index(item)
+        self.selected_dates.append(end_index)
+        if len(self.selected_dates) == 2:
+            report_df = report_df = pd.read_csv(f".\\saved\\{self.files[self.selected_dates[0]]}")
+            for i in range((self.selected_dates[0] + 1), (self.selected_dates[1] + 1)):
+                next_df = pd.read_csv(f".\\saved\\{self.files[i]}")
+                report_df = pd.concat([report_df, next_df], ignore_index=True)
+            report_df["timestamp"] = pd.to_datetime(report_df.timestamp)
+            self.generate_report(report_df, mode=1)
+        else: 
+            self.master.show_error_popup("Error!", "There was a problem with picking dates, try again.")
 
 if __name__ == "__main__":
     root = py_cui.PyCUI(7, 6)
