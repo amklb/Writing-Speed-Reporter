@@ -291,7 +291,7 @@ class WritingSpeedApp():
             self.master.show_error_popup("Error!", "There was a problem with picking dates, try again.")
 
 if __name__ == "__main__":
-    root = py_cui.PyCUI(4, 4)
+    root = py_cui.PyCUI(6, 6)
     root.set_title("Writing Speed") 
     s = WritingSpeedApp(root)
     root.start()

@@ -31,5 +31,6 @@ Report also includes date (of creating the report), peak speed, average speed an
 * [pynput](https://pynput.readthedocs.io/en/latest/)
 * [NumPy](https://numpy.org/)
 * [pandas](https://pandas.pydata.org/)
+* [psutil](https://psutil.readthedocs.io/en/latest/)
 
 ![writing_speed_app](https://github.com/user-attachments/assets/83608928-b3d5-4a5a-adbb-d15e46ec4841)

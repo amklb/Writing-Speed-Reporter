@@ -1,0 +1,7 @@
+py_cui
+pynput
+numpy
+seaborn
+reportlab
+pandas
+psutil
