@@ -1,5 +1,3 @@
-
-
 from win32gui import GetWindowText, GetForegroundWindow # Processes, paths, threading
 from win32process import GetWindowThreadProcessId
 import psutil
@@ -35,8 +33,7 @@ class WritingSpeedApp():
         self.events = []
         self.per_minute_events = []
         self.writing_speed_per_minute = []
-        self.ESC_KEY = keyboard.Key.f10
-        self.REFRESH_TIME = 1 * 20
+        self.REFRESH_TIME = 1 * 60
         self.max_speed = 400
         self.min_speed = 70
         self.running_status = False
@@ -46,12 +43,12 @@ class WritingSpeedApp():
 
         # Set up CUI
         self.master = master
-        self.title_label = self.master.add_label(title="Writing", row=0, column=1)
-        self.start_button = self.master.add_button("START", 3, 1, command=self.start)
-        self.stop_button = self.master.add_button("STOP", 3, 2, command=self.stop)
-        self.saved_button = self.master.add_button("SAVED", 4, 1, command=self.saved_popup)
-        self.options_button = self.master.add_button("OPTIONS", 4, 2, command=self.open_options)
-        self.status_label = self.master.add_label(title="OFF", row=1, column=1).set_color(py_cui.RED_ON_BLACK)
+        self.title_label = self.master.add_label(title="CPM Reporter", row=0, column=1)
+        self.start_button = self.master.add_button("START", 1, 1, command=self.start)
+        self.stop_button = self.master.add_button("STOP", 1, 2, command=self.stop)
+        self.saved_button = self.master.add_button("SAVED", 2, 1, command=self.saved_popup)
+        self.options_button = self.master.add_button("OPTIONS", 2, 2, command=self.open_options)
+        self.status_label = self.master.add_label(title="OFF", row=0, column=2).set_color(py_cui.RED_ON_BLACK)
 
         # Set up variables for threads
         self.listener = None
@@ -88,10 +85,6 @@ class WritingSpeedApp():
                 "process" : process,
             }
             self.events.append(event_dict)
-            if key == keyboard.Key.f10:
-                self.generate_report()
-            elif key == keyboard.Key.f8:
-                self.save_record()
         except AttributeError:
             pass
 
@@ -105,8 +98,7 @@ class WritingSpeedApp():
                 strokes_per_minute =("process", "count"), 
                 process = ("process", lambda x: x.mode()[0]),
             )
-            print(events_df.shape)
-            print(events_df)
+            
             events_array = events_df.to_dict('records') 
             for event in events_array:
                 event["timestamp"] = datetime.now()
@@ -114,7 +106,7 @@ class WritingSpeedApp():
         except KeyError:
             pass
         
-        print("refreshing")
+
         
         # Run recursively
         sleep(self.REFRESH_TIME)
@@ -183,12 +175,12 @@ class WritingSpeedApp():
             doc.setLineWidth(.3)
             pdfmetrics.registerFont(TTFont("DejaVu-Sans", r".\font\DejaVuSans.ttf")) # Load font
             doc.setFont("DejaVu-Sans", 12) 
-            doc.drawString(30,750,f"Date: {timestamp.date()}, {timestamp.hour}:{timestamp.minute}") #Put text
-            doc.drawString(30, 735, f"Total characters: {total_characters} characters")
-            doc.drawString(30, 720, f"Average speed: {average_speed: .2f} cmp")
-            doc.drawString(30, 705, f"Peak Speed: {peak_speed} cpm")
-            doc.drawImage(r".\graphs\barplot.png", 30, 450, 320, 240) # Put images
-            doc.drawImage(r".\graphs\lineplot.png", 30, 200, 320, 240)
+            doc.drawString(45,750,f"Date: {timestamp.date()}, {timestamp.hour}:{timestamp.minute}") #Put text
+            doc.drawString(45, 735, f"Total characters: {total_characters} characters")
+            doc.drawString(45, 720, f"Average speed: {average_speed: .2f} cmp")
+            doc.drawString(45, 705, f"Peak Speed: {peak_speed} cpm")
+            doc.drawImage(r".\graphs\barplot.png", 150, 400, 360, 280) # Put images
+            doc.drawImage(r".\graphs\lineplot.png", 150, 100, 360, 280)
             doc.save()
 
             self.master.show_message_popup("Report Generated!", "Report saved in the PDF folder!")
@@ -210,9 +202,8 @@ class WritingSpeedApp():
 
     def start(self):
         # Start listening for keyboard
-        print("starting")
         self.running_status = True
-        self.status_label = self.master.add_label(title="Running...", row=1, column=1).set_color(py_cui.GREEN_ON_BLACK)
+        self.status_label = self.master.add_label(title="Running...", row=0, column=2).set_color(py_cui.GREEN_ON_BLACK)
 
 
         if self.listener and self.listener.running: #if thread already started
@@ -238,7 +229,7 @@ class WritingSpeedApp():
             self.aggregate_running = False
             self.aggregate_thread = None
             self.running_status = False
-            self.status_label = self.master.add_label(title="OFF", row=1, column=1).set_color(py_cui.RED_ON_BLACK)
+            self.status_label = self.master.add_label(title="OFF", row=0, column=2).set_color(py_cui.RED_ON_BLACK)
         else:
             self.master.show_error_popup("Error!", "Tracking is not running")
         
@@ -300,7 +291,7 @@ class WritingSpeedApp():
             self.master.show_error_popup("Error!", "There was a problem with picking dates, try again.")
 
 if __name__ == "__main__":
-    root = py_cui.PyCUI(7, 6)
+    root = py_cui.PyCUI(4, 4)
     root.set_title("Writing Speed") 
     s = WritingSpeedApp(root)
     root.start()
