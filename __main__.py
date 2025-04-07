@@ -40,6 +40,7 @@ class WritingSpeedApp():
         self.status_text = "OFF"
         self.files = []
         self.selected_dates = []
+        self.include_all_keys = False
 
         # Set up CUI
         self.master = master
@@ -75,21 +76,23 @@ class WritingSpeedApp():
             return np.nan
         
     def on_press(self, key):
+        
         # Put keyboard event into temporary df
         time = datetime.now()
         process = self.get_process_name()
-        try:
-            event_dict= {
-                "hour" : time.hour,
-                "minute" : time.minute,
-                "process" : process,
-            }
-            self.events.append(event_dict)
-        except AttributeError:
-            pass
+        if self.include_all_keys or (type(key) == keyboard._win32.KeyCode) or (key == keyboard.Key.space):
+            try:
+                event_dict= {
+                    "hour" : time.hour,
+                    "minute" : time.minute,
+                    "process" : process,
+                }
+                self.events.append(event_dict)
+            except AttributeError:
+                pass
 
     def aggregate_events(self):
-        # Aggregate data from df list to get cmp; move to main df
+        # Aggregate data from df list to get cpm; move to main df
         try:
             processed_events = self.events.copy()
             events_df = pd.DataFrame(processed_events)
@@ -177,7 +180,7 @@ class WritingSpeedApp():
             doc.setFont("DejaVu-Sans", 12) 
             doc.drawString(45,750,f"Date: {timestamp.date()}, {timestamp.hour}:{timestamp.minute}") #Put text
             doc.drawString(45, 735, f"Total characters: {total_characters} characters")
-            doc.drawString(45, 720, f"Average speed: {average_speed: .2f} cmp")
+            doc.drawString(45, 720, f"Average speed: {average_speed: .2f} cpm")
             doc.drawString(45, 705, f"Peak Speed: {peak_speed} cpm")
             doc.drawImage(r".\graphs\barplot.png", 150, 400, 360, 280) # Put images
             doc.drawImage(r".\graphs\lineplot.png", 150, 100, 360, 280)
@@ -239,6 +242,11 @@ class WritingSpeedApp():
             self.master.show_text_box_popup("Minimum wiring speed considered (usually 70 cpm):", command=self.set_min_speed)
         elif paramter == "maximum speed":
             self.master.show_text_box_popup("Minimum wiring speed considered (usually 400 cpm):", command=self.set_max_speed)
+        elif paramter == "include all keys":
+            self.master.show_yes_no_popup("Include keys that aren't alphabetical, numerical or otherwise used in writing?", command=self.include_keys)
+
+    def include_keys(self, bool_value):
+        self.include_all_keys = bool_value
 
     def set_min_speed(self, speed):
         # Change min speed value
@@ -262,7 +270,7 @@ class WritingSpeedApp():
         # Open options menu
         self.selected_dates.clear()
         self.master.show_menu_popup("Change parameters:",
-                                    ["minimum speed", "maximum speed"],
+                                    ["minimum speed", "maximum speed", "include all keys"],
                                     command=self.options,
                                     run_command_if_none=False)
 
