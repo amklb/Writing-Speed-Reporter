@@ -41,6 +41,14 @@ class WritingSpeedApp():
         self.files = []
         self.selected_dates = []
         self.include_all_keys = False
+        self.selected_tag = np.nan
+        self.tags = []
+        try:
+            with open(r".\tags\tags.txt", "r") as f:
+                for line in f:
+                    self.tags.append(line)
+        except:
+            pass
 
         # Set up CUI
         self.master = master
@@ -50,6 +58,8 @@ class WritingSpeedApp():
         self.saved_button = self.master.add_button("SAVED", 2, 1, command=self.saved_popup)
         self.options_button = self.master.add_button("OPTIONS", 2, 2, command=self.open_options)
         self.status_label = self.master.add_label(title="OFF", row=0, column=2).set_color(py_cui.RED_ON_BLACK)
+        self.tag_1 = self.master.add_label(title="Current tag:", row=3, column=1)
+        self.tag_2 = self.master.add_label(title="NONE", row=3, column=2)
 
         # Set up variables for threads
         self.listener = None
@@ -61,6 +71,7 @@ class WritingSpeedApp():
         Path(r".\saved").mkdir(exist_ok=True)
         Path(r".\graphs").mkdir(exist_ok=True)
         Path(r".\pdf").mkdir(exist_ok=True)
+        Path(r".\tags").mkdir(exist_ok=True)
 
         #Set up aesthetics
         sns.set_style("darkgrid")
@@ -101,7 +112,7 @@ class WritingSpeedApp():
                 strokes_per_minute =("process", "count"), 
                 process = ("process", lambda x: x.mode()[0]),
             )
-            
+            events_df["tag"] = self.selected_tag
             events_array = events_df.to_dict('records') 
             for event in events_array:
                 event["timestamp"] = datetime.now()
@@ -121,6 +132,7 @@ class WritingSpeedApp():
     def generate_report(self, df, mode = 0):
         report_df = df
         timestamp = datetime.now()
+        third_graph = False
 
         # Clean data and get info to be printed
         clean_df = report_df.query(f"strokes_per_minute >= {self.min_speed} and strokes_per_minute <= {self.max_speed}")
@@ -170,6 +182,29 @@ class WritingSpeedApp():
         fig2.savefig(r".\graphs\lineplot.png")
         fig2.clf()
     
+        # Additional graph for tags on multi-session report only!
+        if mode == 1:
+            unique_tags = pd.unique(clean_df["tag"]) 
+            if len(unique_tags) == 1 and unique_tags[0] == np.nan:
+                pass
+            else:
+                third_graph = True
+                speed_by_tag_data = clean_df.groupby(["tag"]).agg(
+                speed = ("strokes_per_minute", "mean")).reset_index()
+                fig_tag = sns.barplot(data=speed_by_tag_data,
+                                        x="tag",
+                                        y="speed",
+                                        palette="flare",
+                                        hue="tag",
+                                        legend=False)
+                fig_tag.set_title("CPM by tag")
+                fig_tag.set_ylabel("Characters Per Minute")
+                fig_tag.set_xlabel("Used Tag")
+                fig3 = fig_process.get_figure()
+                fig3.savefig(r".\graphs\barplot_2.png")
+                fig3.clf()
+
+
 
         # Create Reportlab PDF
         try:
@@ -182,8 +217,13 @@ class WritingSpeedApp():
             doc.drawString(45, 735, f"Total characters: {total_characters} characters")
             doc.drawString(45, 720, f"Average speed: {average_speed: .2f} cpm")
             doc.drawString(45, 705, f"Peak Speed: {peak_speed} cpm")
-            doc.drawImage(r".\graphs\barplot.png", 150, 400, 360, 280) # Put images
-            doc.drawImage(r".\graphs\lineplot.png", 150, 100, 360, 280)
+            if third_graph == False:
+                doc.drawImage(r".\graphs\barplot.png", 150, 400, 360, 280) # Put images
+            else:
+                doc.drawImage(r".\graphs\barplot.png", 10, 430, 300, 220) 
+                doc.drawImage(r".\graphs\barplot_2.png", 300, 430, 300, 220) 
+                
+            doc.drawImage(r".\graphs\lineplot.png", 150, 100, 390, 280)
             doc.save()
 
             self.master.show_message_popup("Report Generated!", "Report saved in the PDF folder!")
@@ -244,6 +284,32 @@ class WritingSpeedApp():
             self.master.show_text_box_popup("Minimum wiring speed considered (usually 400 cpm):", command=self.set_max_speed)
         elif paramter == "include all keys":
             self.master.show_yes_no_popup("Include keys that aren't alphabetical, numerical or otherwise used in writing?", command=self.include_keys)
+        elif paramter == "select tag for session":
+            self.master.show_menu_popup("Select tag for this session", self.tags, command=self.select_tag, run_command_if_none=False)
+        elif paramter == "add tags":
+            self.master.show_text_box_popup("Add the tag:", command=self.add_tag)
+        elif paramter == "delete tags":
+            self.master.show_menu_popup("Select item for deletion", self.tags, command=self.delete_tag, run_command_if_none=False)
+        elif paramter == "exclude tags from session":
+            self.selected_tag = np.nan
+            self.tag_2 = self.master.add_label(title="NONE", row=3, column=2)
+
+    def delete_tag(self, tag):
+        self.tags.remove(tag)
+        self.rewrite_tags_file()
+
+    def add_tag(self, tag):
+        self.tags.append(tag)
+        self.rewrite_tags_file()
+
+    def select_tag(self, tag): 
+        self.selected_tag = tag
+        self.tag_2 = self.master.add_label(title=tag, row=3, column=2)
+
+    def rewrite_tags_file(self):
+        with open(r".\tags\tags.txt", "w") as f:
+            for tag in self.tags:
+                f.write(tag + "\n")
 
     def include_keys(self, bool_value):
         self.include_all_keys = bool_value
@@ -270,15 +336,20 @@ class WritingSpeedApp():
         # Open options menu
         self.selected_dates.clear()
         self.master.show_menu_popup("Change parameters:",
-                                    ["minimum speed", "maximum speed", "include all keys"],
+                                    ["minimum speed", "maximum speed",
+                                      "include all keys", "select tag for session", 
+                                      "add tags", "delete tags",
+                                      "exclude tags from session"],
                                     command=self.options,
                                     run_command_if_none=False)
 
     def saved_popup(self):
+        # Starting date for multi-session report
         self.files = [f for f in listdir(r".\saved") if isfile(join(r".\saved", f))]
         self.master.show_menu_popup("Generate multi-day report, pick a start date:", self.files, command=self.pick_dates, run_command_if_none=False)
 
     def pick_dates(self, item):
+        # End date for multi-session report
         start_index = self.files.index(item)
         self.selected_dates.append(start_index)
         self.master.show_menu_popup("Generate multi-day report, pick an end date:",
@@ -286,6 +357,7 @@ class WritingSpeedApp():
                                        run_command_if_none=False)
 
     def multi_day_report(self, item):
+        # Load saved files into df
         end_index = self.files.index(item)
         self.selected_dates.append(end_index)
         if len(self.selected_dates) == 2:
