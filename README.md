@@ -7,6 +7,8 @@ This app’s purpose is to track and report on a user's writing speed. It uses c
 * Options - allows for changing upper and lower threshold of CPM considered to weed out moments where nothing is written in data analysis, deciding if app should include all of the keys or only those which are used for writing (exclude backspace, alt, etc.)
 * Tags - tags can be added or deleted in options and used to denote the type of writing session (e.g. lecture, coding, etc.). Later they can be compared in multi-session reports. Tags are kept in between uses of the app.
 
+![writing1](https://github.com/user-attachments/assets/f79ff975-df18-4246-9f84-3ef7bc7b2b60)
+
 #### 2.1. Data visualization
 As of now the report includes two or three graphs: barplot showing the relationship between mean CPM and process used at the time of writing;
 
@@ -26,7 +28,7 @@ Report also includes date (of creating the report), peak speed, average speed an
 1. Clone repository locally
 2. `cd` to the project directory
 3. Install the dependencies if needed `pip install -r req.txt`
-4. Run the project in commandline `py -m __main__`
+4. Run the project in commandline `py -m main`
 5. In-app navigation - keyboard arrows to move around, enter to select/confirm, esc to go back
 
 #### 3.1 Dependencies
@@ -38,4 +40,5 @@ Report also includes date (of creating the report), peak speed, average speed an
 * [pandas](https://pandas.pydata.org/)
 * [psutil](https://psutil.readthedocs.io/en/latest/)
 
-![writing_speed_app](https://github.com/user-attachments/assets/83608928-b3d5-4a5a-adbb-d15e46ec4841)
+
+
